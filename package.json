@@ -1,7 +1,7 @@
 {
-  "name": "zetta-starter-device-driver",
+  "name": "zetta-fona-sms-serial-driver",
   "version": "0.1.0",
-  "description": "Zetta starter device driver for any platform",
+  "description": "Zetta FONA SMS serial device driver",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,14 +9,16 @@
   "license": "MIT",
   "dependencies": {
     "zetta-device": "*",
-    "zetta-scout": "*"
+    "zetta-scout": "*",
+    "zetta-serial-device-driver"
   },
   "directories": {
     "example": "example"
   },
   "keywords": [
     "zetta",
-    "starter device",
-    "any platform"
+    "fona",
+    "sms",
+    "serial"
   ]
 }

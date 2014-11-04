@@ -1,14 +1,21 @@
 var Scout = require('zetta-scout');
 var util = require('util');
-var StarterDevice = require('./starter_device');
+var FonaSMS = require('./fona_sms');
 
-var StarterDeviceScout = module.exports = function() {
+var FonaScout = module.exports = function() {
   Scout.call(this);
 };
-util.inherits(StarterDeviceScout, Scout);
+util.inherits(FonaScout, Scout);
 
-StarterDeviceScout.prototype.init = function(next) {
+FonaScout.prototype.init = function(next) {
+  var queries = [
+    this.server.where({ type: 'serial' })
+  ];
+
   var self = this;
-  self.discover(StarterDevice, {default: 'DEFAULT'});
+  this.server.observe(queries, function(serialDevice) {
+    self.discover(FonaSMS, serialDevice);
+  });
+
   next();
 }

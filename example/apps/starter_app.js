@@ -1,10 +1,10 @@
 module.exports = function testApp(server) {
   
-  var starterDeviceQuery = server.where({type: 'starter'});
+  var fonaSMSQuery = server.where({type: 'fona-sms'});
   
-  server.observe([starterDeviceQuery], function(starterDevice){
+  server.observe([fonaSMSQuery], function(fonaSMS){
     setInterval(function(){
-      starterDevice.call('do', './example/apps/starter_app.js is running', function() {});
+      fonaSMS.call('read-sms', 1, function() {});
     }, 5000);
   });
   

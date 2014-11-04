@@ -1,19 +1,19 @@
-##Zetta starter device driver for any platform
+##Zetta FONA SMS serial device driver
 
 ###Install
 
 ```
-$> npm install zetta-starter-device-driver
+$> npm install zetta-fona-sms-serial-driver
 ```
 
 ###Usage
 
 ```
 var zetta = require('zetta');
-var StarterDevice = require('zetta-starter-device-driver');
+var FonaSMS = require('zetta-fona-sms-serial-driver');
 
 zetta()
-  .use(StarterDevice)
+  .use(FonaSMS)
   .listen(1337)
 ```
 
@@ -23,10 +23,9 @@ zetta()
 
 ###Transitions
 
-#####do(message)
+#####write-sms(phoneNumber, message)
 
-Calls the device's log() function passing the message param.
+#####read-sms(messageIndex)
 
 ###Design
 
-This device driver is designed to be the starter code for other device drivers.

@@ -1,8 +1,10 @@
 var zetta = require('zetta');
-var StarterDevice = require('../index');
-var app = require('./apps/starter_app');
+var SerialDevice = require('zetta-serial-device-driver');
+var FonaSMS = require('../index');
+var app = require('./app');
 
 zetta()
-  .use(StarterDevice)
+  .use(SerialDevice, '/dev/ttyO1')
+  .use(FonaSMS)
   .use(app)
   .listen(1337);
