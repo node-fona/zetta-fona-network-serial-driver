@@ -11,7 +11,7 @@ var FonaSMS = module.exports = function() {
 util.inherits(FonaSMS, Device);
 
 FonaSMS.prototype.init = function(config) {
-  var self = this;
+
   config
   .name('Adafruit FonaSMS')
   .type('fona-sms')
@@ -28,10 +28,12 @@ FonaSMS.prototype.init = function(config) {
     { name: 'message', title: 'Body of the SMS', type: 'text'},
     ]);
 
-  self._requestAllSMSMessages();
+  var self = this;
+  this._requestAllSMSMessages();
   setInterval(function() {
     self._requestAllSMSMessages();
   }, 60000);
+
 };
 
 FonaSMS.prototype.sendSMS = function(phoneNumber, message, cb) {

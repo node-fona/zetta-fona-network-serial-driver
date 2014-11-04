@@ -2,12 +2,12 @@ var Scout = require('zetta-scout');
 var util = require('util');
 var FonaSMS = require('./fona_sms');
 
-var FonaScout = module.exports = function() {
+var FonaSMSScout = module.exports = function() {
   Scout.call(this);
 };
-util.inherits(FonaScout, Scout);
+util.inherits(FonaSMSScout, Scout);
 
-FonaScout.prototype.init = function(next) {
+FonaSMSScout.prototype.init = function(next) {
   var queries = [
     this.server.where({ type: 'serial' })
   ];
