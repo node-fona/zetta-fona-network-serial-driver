@@ -19,10 +19,11 @@ FonaSMS.prototype.init = function(config) {
   .type('fona-sms')
   .monitor('smsMaxIndex')
   .state('waiting')
-  .when('waiting', { allow: ['send-sms', 'read-sms', 'delete-sms']})
+  .when('waiting', { allow: ['send-sms', 'read-sms', 'delete-sms', 'get-sms-count']})
   .when('sending-sms', { allow: ['read-sms','delete-sms']})
   .when('reading-sms', { allow: ['send-sms']})
   .when('deleting-sms', { allow: ['send-sms']})
+  .when('getting-sms-count', { allow: []})
   .map('send-sms', this.sendSMS, [
     { name: 'phoneNumber', title: 'Phone Number to Send SMS', type: 'text'},
     { name: 'message', title: 'Body of the SMS', type: 'text'},
@@ -40,90 +41,77 @@ FonaSMS.prototype.init = function(config) {
         2: 'Ignore the value of index and delete all SMS messages whose status is "received read" or "stored sent" from the message storage area.',
         3: 'Ignore the value of index and delete all SMS messages whose status is "received read", "stored unsent" or "stored sent" from the message storage area.',
         4: 'Ignore the value of index and delete all SMS messages from the message storage area.'
-      }}]);
+      }}])
+  .map('get-sms-count', this.getSMSMaxIndexAndCapacity);
 
-  var self = this;
-  this._requestAllSMSMessages();
-  setInterval(function() {
-    self._requestAllSMSMessages();
-  }, 60000);
+  this._setTextMode();
 
 };
 
 FonaSMS.prototype.sendSMS = function(phoneNumber, message, cb) {
-  
+  this.log('sendSMS #phoneNumber: ' + phoneNumber + ' #message: ' + message);  
+  // TODO: move state assignment into queue worker
   this.state = 'sending-sms';
 
   var self = this;
   
-  this.log('sendSMS #phoneNumber: ' + phoneNumber + ' #message: ' + message);
+  var tasks = [
+  { command: 'AT+CMGS="' + phoneNumber + '"', regexps: [/^$/]},
+  { rawCommand: message + '\u001a', regexps: [/> /, /\+CMGS: \d+/, /^$/, /OK/]}];
   
-  this._serialDevice.enqueue({
-    name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
-    command: 'AT+CMGF=1', 
-    regexps: [/^$/,/OK/]}, function() {});
-  this._serialDevice.enqueue({
-    name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
-    command: 'AT+CMGS="' + phoneNumber + '"',
-    regexps: []}, function() {});
-  this._serialDevice.enqueue({
-    name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
-    rawCommand: message + '\u001a',
-    regexps: [new RegExp('^> ' + message + '\\s*'), /^\+CMGS: (\d+)/,/^$/,/OK/]}, function() {});
-  
-  this.state = 'waiting';
-
-  cb();
+  this._serialDevice.enqueue(tasks, null, function() {
+      self.state = 'waiting';
+      cb();
+    });
 };
 
 FonaSMS.prototype.readSMS = function(messageIndex, cb) {
-  
+  this.log('readSMS: ' + messageIndex);
+  // TODO: move state assignment into queue worker
   this.state = 'reading-sms';
   
-  var smsMessage = {};
-  
-  this.log('readSMS: ' + messageIndex);
   var self = this;
-  this._serialDevice.enqueue({
-    name: 'Read SMS: ' + messageIndex,
-    command: 'AT+CMGF=1', 
-    regexps: [/^$/,/OK/]}, function() {});
-  this._serialDevice.enqueue({
-    name: 'Read SMS: ' + messageIndex,
-    command: 'AT+CSDH=1', 
-    regexps: [/^$/, /OK/]}, function() {});
-  this._serialDevice.enqueue({
-    name: 'Read SMS: ' + messageIndex,
-    command: 'AT+CMGR=' + messageIndex,
-    regexps: [/^$/, /^\+CMGR: "([A-Z]+) ([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/]}, function (matches) {
-      if (matches[0][1] === 'OK') {
-        self.state = 'waiting';
-        cb();
-      } else {
-        self.smsMessages[messageIndex] = {
-          receivedState: matches[0][1],
-          readState: matches[0][2],
-          sendersPhoneNumber: matches[0][3],
-          timeStamp: matches[0][5],
-        };
-        self._serialDevice.enqueue({
-            priority: self._serialDevice.highPriority,
-            command: null,
-            regexps: [/^(.*)$/,/^$/,/^OK$/]
-          }, function(matches) {
-            self.smsMessages[messageIndex] = {
-              body: matches[0][0]
-            };
-            self.state = 'waiting';
-            cb();
-          });
+  
+  var cmgrRegexps = [
+    /^$/,
+    /^(OK)|\+(CMGR):\s"([A-Z]+)\s([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/
+  ];
+  
+  var cmgrOnMatch = function (matches) {
+    if (matches[1][2] === 'CMGR') {
+      self.smsMessages[messageIndex] = {
+        receivedState: matches[1][3],
+        readState: matches[1][4],
+        sendersPhoneNumber: matches[1][5],
+        timeStamp: matches[1][7],
+      };
+      self._serialDevice.enqueue(
+        { regexps: [/^(.*)$/,/^$/,/^OK$/],
+          onMatch: function(matches) { self.smsMessages[messageIndex].body = matches[0][0] }
+        },
+        self._serialDevice.highPriority
+      );
+    } else {
+      self.smsMessages[messageIndex] = {};
     }
+  }
+
+  var task = 
+    { command: 'AT+CMGR=' + messageIndex, regexps: cmgrRegexps, onMatch: cmgrOnMatch};
+
+  this._serialDevice.enqueue(task, null, function() {
+    self.state = 'waiting';
+    cb();
   });
+
 }
 
 FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
+  this.log('deleteSMS: ' + messageIndex);
+  // TODO: move state assignment into queue worker
+  this.state = 'deleting-sms';
+  
   var deleteCommand = 'AT+CMGD=';
-
   if (flag) {
     // if flag then messageIndex param is ignored
     deleteCommand += '1,' + flag;
@@ -131,56 +119,50 @@ FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
     deleteCommand += messageIndex;
   }
   
-  this.state = 'deleting-sms';
+  var task = {command: deleteCommand, regexps: [/^$/,/OK/]};
   
-  console.log('messageIndex:',messageIndex);
-  
-  this.log('deleteSMS: ' + messageIndex);
   var self = this;
-
-  this._serialDevice.enqueue({
-    name: 'Delete SMS: ' + messageIndex,
-    command: 'AT+CMGF=1',
-    regexps: [/^$/,/OK/]}, function() {});
-
-  this._serialDevice.enqueue({
-    command: deleteCommand,
-    regexps: [/OK/]}, function() {
-      // TODO consider updating smsMessages with deletions
-      // including deleting more based on flag
+  this._serialDevice.enqueue(task, null, function() {
       self.state = 'waiting';
       cb();
     });
 }
 
-FonaSMS.prototype._requestAllSMSMessages = function() {
-  this.log('Request ALL SMS Messages');
+FonaSMS.prototype.getSMSMaxIndexAndCapacity = function(cb) {
+  this.log('getSMSMaxIndexAndCapacity');
   var self = this;
-  var messageIndex = 1;
-  this._requestsmsMaxIndexAndCapacity(function() {
-    async.whilst(
-      function() {messageIndex <= self.smsMaxIndex},
-      function(callback) {
-        self.readSMS(messageIndex, function() {});
-        messageIndex++
-      },
-      function(err) {}    
-    );
+  
+  task =
+    { command: 'AT+CPMS?', regexps: [/^$/,/^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/,/^$/, /OK/],
+      onMatch: function (matches) {
+        self.smsMaxIndex = matches[1][1];
+        self.smsCapacity = matches[1][2];
+      }};
+  
+  this._serialDevice.enqueue(task, null, function() {
+    self.state = 'waiting';
+    cb();
   });
 }
 
-FonaSMS.prototype._requestsmsMaxIndexAndCapacity = function(cb) {
+FonaSMS.prototype._setTextMode = function() {
+  this.log('_setTextMode');
   var self = this;
-  this._serialDevice.enqueue({
-    command: 'AT+CMGF=1', 
-    regexps: [/^$/,/OK/]}, function() {});
-  this._serialDevice.enqueue({
-    name: 'Get Max Index and Capacity',
-    command: 'AT+CPMS?',
-    regexps: [/^$/,/^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/]},
-    function (matches) {
-      self.smsMaxIndex = matches[1][1];
-      self.smsCapacity = matches[1][2];
-      cb();
-    });
+  this._serialDevice.enqueue(
+    [{ command: 'AT+CMGF=1', regexps: [/^$/,/OK/]},
+    { command: 'AT+CSDH=1', regexps: [/^$/, /OK/]}],
+    self._serialDevice.sysPriority);
 }
+
+FonaSMS.prototype._getAllSMSMessages = function() {
+  this.log('_getAllSMSMessages');
+  var self = this;
+  
+  this._getSMSMaxIndexAndCapacity(function () {
+    self.log('looping through messages to read');
+    for (messageIndex = 1; messageIndex <= self.smsMaxIndex; messageIndex++) {
+      self.readSMS(messageIndex, function() {});
+    }
+  });
+}
+
