@@ -3,6 +3,6 @@ var SerialDevice = require('zetta-serial-device-driver');
 var FonaSMS = require('../index');
 
 zetta()
-  .use(SerialDevice, '/dev/ttyO1')
+  .use(SerialDevice, '/dev/cu.usbserial')
   .use(FonaSMS)
   .listen(1337);

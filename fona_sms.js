@@ -1,11 +1,13 @@
 var Device = require('zetta-device');
 var util = require('util');
+var async = require('async');
 
 var FonaSMS = module.exports = function() {
   Device.call(this);
   this._serialDevice = arguments[0];
 
   this.smsMaxIndex = null;
+  this.smsCapacity = null;
   this.smsMessages = {};
 };
 util.inherits(FonaSMS, Device);
@@ -59,11 +61,11 @@ FonaSMS.prototype.sendSMS = function(phoneNumber, message, cb) {
   this._serialDevice.enqueue({
     name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
     command: 'AT+CMGF=1', 
-    regexps: [/^AT\+CMGF=1/,/OK/]}, function() {});
+    regexps: [/^$/,/OK/]}, function() {});
   this._serialDevice.enqueue({
     name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
     command: 'AT+CMGS="' + phoneNumber + '"',
-    regexps: [new RegExp('^AT\\+CMGS="' + phoneNumber + '"\\s*')]}, function() {});
+    regexps: []}, function() {});
   this._serialDevice.enqueue({
     name: 'Send SMS: ' + message + ' to: ' + phoneNumber,
     rawCommand: message + '\u001a',
@@ -85,25 +87,24 @@ FonaSMS.prototype.readSMS = function(messageIndex, cb) {
   this._serialDevice.enqueue({
     name: 'Read SMS: ' + messageIndex,
     command: 'AT+CMGF=1', 
-    regexps: [/^AT\+CMGF=1/,/OK/]}, function() {});
+    regexps: [/^$/,/OK/]}, function() {});
   this._serialDevice.enqueue({
     name: 'Read SMS: ' + messageIndex,
     command: 'AT+CSDH=1', 
-    regexps: [/^AT\+CSDH=1/,/OK/]}, function() {});
+    regexps: [/^$/, /OK/]}, function() {});
   this._serialDevice.enqueue({
     name: 'Read SMS: ' + messageIndex,
-    command: 'AT+CMGR=' + messageIndex, 
-    regexps: [/^AT\+CMGR=\d+/,
-      /^(OK)|\+CMGR: "([A-Z]+) ([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/]}, function (matches) {
-      if (matches[1][1] === 'OK') {
+    command: 'AT+CMGR=' + messageIndex,
+    regexps: [/^$/, /^\+CMGR: "([A-Z]+) ([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/]}, function (matches) {
+      if (matches[0][1] === 'OK') {
         self.state = 'waiting';
         cb();
       } else {
         self.smsMessages[messageIndex] = {
-          receivedState: matches[1][1],
-          readState: matches[1][2],
-          sendersPhoneNumber: matches[1][3],
-          timeStamp: matches[1][5],
+          receivedState: matches[0][1],
+          readState: matches[0][2],
+          sendersPhoneNumber: matches[0][3],
+          timeStamp: matches[0][5],
         };
         self._serialDevice.enqueue({
             priority: self._serialDevice.highPriority,
@@ -111,7 +112,7 @@ FonaSMS.prototype.readSMS = function(messageIndex, cb) {
             regexps: [/^(.*)$/,/^$/,/^OK$/]
           }, function(matches) {
             self.smsMessages[messageIndex] = {
-              body: matches[1][0]
+              body: matches[0][0]
             };
             self.state = 'waiting';
             cb();
@@ -136,13 +137,15 @@ FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
   
   this.log('deleteSMS: ' + messageIndex);
   var self = this;
+
   this._serialDevice.enqueue({
     name: 'Delete SMS: ' + messageIndex,
     command: 'AT+CMGF=1',
-    regexps: [/^AT\+CMGF=1/,/OK/]}, function() {});
+    regexps: [/^$/,/OK/]}, function() {});
+
   this._serialDevice.enqueue({
     command: deleteCommand,
-    regexps: [/^AT\+CMGD=\d+[,\d+]+/,/OK/]}, function() {
+    regexps: [/OK/]}, function() {
       // TODO consider updating smsMessages with deletions
       // including deleting more based on flag
       self.state = 'waiting';
@@ -153,20 +156,31 @@ FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
 FonaSMS.prototype._requestAllSMSMessages = function() {
   this.log('Request ALL SMS Messages');
   var self = this;
+  var messageIndex = 1;
   this._requestsmsMaxIndexAndCapacity(function() {
-    for (messageIndex = 1; messageIndex <= self.smsMaxIndex; messageIndex++) {
-      self.readSMS(messageIndex, function() {});
-    }});
+    async.whilst(
+      function() {messageIndex <= self.smsMaxIndex},
+      function(callback) {
+        self.readSMS(messageIndex, function() {});
+        messageIndex++
+      },
+      function(err) {}    
+    );
+  });
 }
 
 FonaSMS.prototype._requestsmsMaxIndexAndCapacity = function(cb) {
   var self = this;
   this._serialDevice.enqueue({
     command: 'AT+CMGF=1', 
-    regexps: [/^AT\+CMGF=1/,/OK/]}, function() {});
-  this._serialDevice.enqueueSimple('AT+CPMS?', /^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/, function (matches) {
-    self.smsMaxIndex = matches[1][1];
-    self.smsCapacity = matches[1][2];
-    cb();
-  });
+    regexps: [/^$/,/OK/]}, function() {});
+  this._serialDevice.enqueue({
+    name: 'Get Max Index and Capacity',
+    command: 'AT+CPMS?',
+    regexps: [/^$/,/^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/]},
+    function (matches) {
+      self.smsMaxIndex = matches[1][1];
+      self.smsCapacity = matches[1][2];
+      cb();
+    });
 }

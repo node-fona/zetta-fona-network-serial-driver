@@ -10,7 +10,8 @@
   "dependencies": {
     "zetta-device": "*",
     "zetta-scout": "*",
-    "zetta-serial-device-driver": "*"
+    "zetta-serial-device-driver": "*",
+    "async": "*"
   },
   "directories": {
     "example": "example"
