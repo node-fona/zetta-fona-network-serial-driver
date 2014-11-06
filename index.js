@@ -8,14 +8,19 @@ var FonaSMSScout = module.exports = function() {
 util.inherits(FonaSMSScout, Scout);
 
 FonaSMSScout.prototype.init = function(next) {
-  var queries = [
-    this.server.where({ type: 'serial' })
-  ];
-
+  var fonaSMSQuery = this.server.where({type: 'fona-sms'});
+  var serialDeviceQuery = this.server.where({ type: 'serial' });
+  
   var self = this;
-  this.server.observe(queries, function(serialDevice) {
-    self.discover(FonaSMS, serialDevice);
-  });
 
-  next();
+  this.server.observe(serialDeviceQuery, function(serialDevice) {
+    self.server.find(fonaSMSQuery, function(err, results) {
+      if (results[0]) {
+        self.provision(results[0], FonaSMS, serialDevice);
+      } else {
+        self.discover(FonaSMS, serialDevice);
+      }
+      next();
+    });
+  });
 }
