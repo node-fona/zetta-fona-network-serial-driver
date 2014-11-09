@@ -1,6 +1,6 @@
 {
   "name": "zetta-fona-sms-serial-driver",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zetta FONA SMS serial device driver",
   "main": "index.js",
   "scripts": {
