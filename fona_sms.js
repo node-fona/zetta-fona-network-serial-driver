@@ -45,14 +45,10 @@ FonaSMS.prototype.init = function(config) {
   .map('get-sms-count', this.getSMSMaxIndexAndCapacity);
 
   this._setTextMode();
-  this._receiveSMS();
-  
-  var self = this;
-  // this._getAllSMSMessages();
-  setInterval(function() {
-    // self._getAllSMSMessages();
-  }, 50);
-  
+
+  this._listenForIncomingSMS();
+  this._getAllSMSMessages();
+
 };
 
 FonaSMS.prototype.sendSMS = function(phoneNumber, message, cb) {
@@ -196,8 +192,8 @@ FonaSMS.prototype.getSMSMaxIndexAndCapacity = function(cb) {
   });
 }
 
-FonaSMS.prototype._receiveSMS = function() {
-  this.log('_receiveSMS');
+FonaSMS.prototype._listenForIncomingSMS = function() {
+  this.log('_listenForIncomingSMS');
   var self = this;
   
   var task = {
@@ -242,9 +238,13 @@ FonaSMS.prototype._setTextMode = function() {
 }
 
 FonaSMS.prototype._getAllSMSMessages = function() {
+
+  // TODO: instead of looping through the indices
+  // consider calling the AT command to get all SMS
+
   this.log('_getAllSMSMessages');
   var self = this;
-  
+
   this.getSMSMaxIndexAndCapacity(function () {
     self.log('looping through messages to read');
     for (messageIndex = 1; messageIndex <= self.smsMaxIndex; messageIndex++) {
