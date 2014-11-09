@@ -45,71 +45,99 @@ FonaSMS.prototype.init = function(config) {
   .map('get-sms-count', this.getSMSMaxIndexAndCapacity);
 
   this._setTextMode();
-
+  this._receiveSMS();
+  
+  var self = this;
+  // this._getAllSMSMessages();
+  setInterval(function() {
+    // self._getAllSMSMessages();
+  }, 50);
+  
 };
 
 FonaSMS.prototype.sendSMS = function(phoneNumber, message, cb) {
   this.log('sendSMS #phoneNumber: ' + phoneNumber + ' #message: ' + message);  
-  // TODO: move state assignment into queue worker
-  this.state = 'sending-sms';
 
   var self = this;
   
   var tasks = [
-  { command: 'AT+CMGS="' + phoneNumber + '"', regexps: [/^$/]},
-  { rawCommand: message + '\u001a', regexps: [/> /, /\+CMGS: \d+/, /^$/, /OK/]}];
-  
+  {    
+    before: function() {self.state = 'sending-sms'},
+    command: 'AT+CMGS="' + phoneNumber + '"', 
+    regexp: /^$/
+  },
+  {
+    rawCommand: message + '\u001a',
+    regexp: /> /
+  },
+  {
+    regexp: /\+CMGS: \d+/
+  },
+  {
+    regexp: /^$/
+  },
+  {
+    regexp: /OK/
+  }
+  ];
+
   this._serialDevice.enqueue(tasks, null, function() {
-      self.state = 'waiting';
-      cb();
-    });
+    self.state = 'waiting';
+    cb();
+  });
 };
 
 FonaSMS.prototype.readSMS = function(messageIndex, cb) {
   this.log('readSMS: ' + messageIndex);
-  // TODO: move state assignment into queue worker
-  this.state = 'reading-sms';
-  
+
   var self = this;
-  
-  var cmgrRegexps = [
-    /^$/,
-    /^(OK)|\+(CMGR):\s"([A-Z]+)\s([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/
-  ];
-  
-  var cmgrOnMatch = function (matches) {
-    if (matches[1][2] === 'CMGR') {
-      self.smsMessages[messageIndex] = {
-        receivedState: matches[1][3],
-        readState: matches[1][4],
-        sendersPhoneNumber: matches[1][5],
-        timeStamp: matches[1][7],
-      };
-      self._serialDevice.enqueue(
-        { regexps: [/^(.*)$/,/^$/,/^OK$/],
-          onMatch: function(matches) { self.smsMessages[messageIndex].body = matches[0][0] }
-        },
-        self._serialDevice.highPriority
-      );
+
+  var onMatchCMGR = function (match) {
+    if (match[2] !== 'CMGR') {
+       self.smsMessages[messageIndex] = {};
     } else {
-      self.smsMessages[messageIndex] = {};
+      self.smsMessages[messageIndex] = {
+        receivedState: match[3],
+        readState: match[4],
+        sendersPhoneNumber: match[5],
+        timeStamp: match[7],
+      };
+      var subTasks = [
+      {
+        regexp: /^(.*)$/,
+        onMatch: function(match) { self.smsMessages[messageIndex].body = match[0] }
+      },
+      {
+        regexp: /^$/
+      },
+      {
+        regexp: /^OK$/
+      }
+      ];
+      self._serialDevice.enqueue(subTasks, self._serialDevice.highPriority);
     }
   }
 
-  var task = 
-    { command: 'AT+CMGR=' + messageIndex, regexps: cmgrRegexps, onMatch: cmgrOnMatch};
+  var tasks = [
+  { 
+    before: function() {self.state = 'reading-sms'},
+    command: 'AT+CMGR=' + messageIndex,
+    regexp: /^$/,
+  },
+  {
+    regexp: /^(OK)|\+(CMGR):\s"([A-Z]+)\s([A-Z]+)","([^"]*)","([^"]*)","([^"]*)",(\d+),(\d+),(\d+),(\d+),"([^"]*)",(\d+),(\d+)/,
+    onMatch: onMatchCMGR
+  }
+  ];
 
-  this._serialDevice.enqueue(task, null, function() {
+  this._serialDevice.enqueue(tasks, null, function() {
     self.state = 'waiting';
     cb();
   });
-
 }
 
 FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
   this.log('deleteSMS: ' + messageIndex);
-  // TODO: move state assignment into queue worker
-  this.state = 'deleting-sms';
   
   var deleteCommand = 'AT+CMGD=';
   if (flag) {
@@ -119,7 +147,16 @@ FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
     deleteCommand += messageIndex;
   }
   
-  var task = {command: deleteCommand, regexps: [/^$/,/OK/]};
+  var tasks = [
+  {
+    before: function() { self.state = 'deleting-sms' },
+    command: deleteCommand,
+    regexp: /^$/
+  },
+  {
+    regexps: /OK/
+  }
+  ];
   
   var self = this;
   this._serialDevice.enqueue(task, null, function() {
@@ -131,34 +168,84 @@ FonaSMS.prototype.deleteSMS = function(messageIndex, flag, cb) {
 FonaSMS.prototype.getSMSMaxIndexAndCapacity = function(cb) {
   this.log('getSMSMaxIndexAndCapacity');
   var self = this;
-  
-  task =
-    { command: 'AT+CPMS?', regexps: [/^$/,/^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/,/^$/, /OK/],
-      onMatch: function (matches) {
-        self.smsMaxIndex = matches[1][1];
-        self.smsCapacity = matches[1][2];
-      }};
-  
-  this._serialDevice.enqueue(task, null, function() {
+
+  var tasks = [
+  {
+    before: function() {self.state = 'getting-sms-max-index-and-capacity'},
+    command: 'AT+CPMS?',
+    regexp: /^$/
+  },
+  {
+    regexp: /^\+CPMS: "[A-Z_]+",(\d+),(\d+),.*$/,
+    onMatch: function (match) {
+      self.smsMaxIndex = match[1];
+      self.smsCapacity = match[2];
+    }
+  },
+  {
+    regexp: /^$/
+  },
+  {
+    regexp: /OK/
+  }
+  ];
+
+  this._serialDevice.enqueue(tasks, null, function() {
     self.state = 'waiting';
     cb();
   });
 }
 
+FonaSMS.prototype._receiveSMS = function() {
+  this.log('_receiveSMS');
+  var self = this;
+  
+  var task = {
+    perennial: true,
+    before: function() {self.state = 'receiving-sms'},
+    regexp: /\+CMTI: "SM",(\d+)/,
+    onMatch: function (match) {
+      var messageIndex = match[1];
+      self.log('!!! incoming SMS: ' + messageIndex);
+      self.readSMS(messageIndex, function() {});
+    }
+  };
+
+  this._serialDevice.enqueue(task);
+}
+
 FonaSMS.prototype._setTextMode = function() {
   this.log('_setTextMode');
   var self = this;
-  this._serialDevice.enqueue(
-    [{ command: 'AT+CMGF=1', regexps: [/^$/,/OK/]},
-    { command: 'AT+CSDH=1', regexps: [/^$/, /OK/]}],
-    self._serialDevice.sysPriority);
+  var tasks = [
+  {
+    before: function() {self.state = 'setting-text-mode'},
+    command: 'AT+CMGF=1',
+    regexp: /^$/
+  },
+  {
+    regexp: /OK/
+  },
+  {
+    command: 'AT+CSDH=1',
+    regexp: /^$/
+  },
+  {
+    regexp: /OK/
+  },
+  ];
+
+  var self = this;
+  this._serialDevice.enqueue(tasks, self._serialDevice.sysPriority, function() {
+    self.state = 'waiting';
+  });
 }
 
 FonaSMS.prototype._getAllSMSMessages = function() {
   this.log('_getAllSMSMessages');
   var self = this;
   
-  this._getSMSMaxIndexAndCapacity(function () {
+  this.getSMSMaxIndexAndCapacity(function () {
     self.log('looping through messages to read');
     for (messageIndex = 1; messageIndex <= self.smsMaxIndex; messageIndex++) {
       self.readSMS(messageIndex, function() {});
