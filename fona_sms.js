@@ -17,7 +17,6 @@ FonaSMS.prototype.init = function(config) {
   config
   .name('Adafruit Fona SMS')
   .type('fona-sms')
-  .monitor('smsMaxIndex')
   .state('waiting')
   .when('waiting', { allow: ['send-sms', 'read-sms', 'delete-sms', 'get-sms-count']})
   .when('sending-sms', { allow: ['read-sms','delete-sms']})
