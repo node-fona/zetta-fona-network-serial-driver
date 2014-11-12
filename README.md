@@ -1,19 +1,19 @@
-##Zetta FONA power serial device driver
+##Zetta FONA network serial device driver
 
 ###Install
 
 ```
-$> npm install zetta-fona-power-serial-driver
+$> npm install zetta-fona-network-serial-driver
 ```
 
 ###Usage
 
 ```
 var zetta = require('zetta');
-var FonaPower = require('zetta-fona-power-serial-driver');
+var FonaNetwork = require('zetta-fona-network-serial-driver');
 
 zetta()
-  .use(FonaPower)
+  .use(FonaNetwork)
   .listen(1337)
 ```
 
