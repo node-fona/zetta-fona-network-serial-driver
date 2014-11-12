@@ -1,6 +1,6 @@
 {
   "name": "zetta-fona-network-serial-driver",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zetta FONA network serial device driver",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,7 @@
   "dependencies": {
     "zetta-device": "^0.8.0",
     "zetta-scout": "^0.4.0",
-    "zetta-serial-device-driver": "^0.5.2"
+    "zetta-serial-device-driver": "~0.5.5"
   },
   "directories": {
     "example": "example"
