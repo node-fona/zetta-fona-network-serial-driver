@@ -1,19 +1,19 @@
-##Zetta FONA SMS serial device driver
+##Zetta FONA power serial device driver
 
 ###Install
 
 ```
-$> npm install zetta-fona-sms-serial-driver
+$> npm install zetta-fona-power-serial-driver
 ```
 
 ###Usage
 
 ```
 var zetta = require('zetta');
-var FonaSMS = require('zetta-fona-sms-serial-driver');
+var FonaPower = require('zetta-fona-power-serial-driver');
 
 zetta()
-  .use(FonaSMS)
+  .use(FonaPower)
   .listen(1337)
 ```
 
@@ -23,9 +23,9 @@ zetta()
 
 ###Transitions
 
-#####write-sms(phoneNumber, message)
+#####get-battery-voltage()
 
-#####read-sms(messageIndex)
+#####get-adc-voltage()
 
 ###Design
 
