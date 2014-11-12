@@ -1,7 +1,7 @@
 {
-  "name": "zetta-fona-sms-serial-driver",
-  "version": "0.1.1",
-  "description": "Zetta FONA SMS serial device driver",
+  "name": "zetta-fona-power-serial-driver",
+  "version": "0.1.0",
+  "description": "Zetta FONA power serial device driver",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,8 +10,7 @@
   "dependencies": {
     "zetta-device": "^0.8.0",
     "zetta-scout": "^0.4.0",
-    "zetta-serial-device-driver": "^0.5.2",
-    "async": "^0.9.0"
+    "zetta-serial-device-driver": "^0.5.2"
   },
   "directories": {
     "example": "example"
@@ -19,7 +18,7 @@
   "keywords": [
     "zetta",
     "fona",
-    "sms",
+    "power",
     "serial"
   ]
 }
